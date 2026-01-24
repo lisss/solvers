@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Detect if we're on Vercel or localhost
+const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+const API_BASE_URL = isProduction 
+  ? '/api'  // Use relative path on Vercel (proxied to serverless functions)
+  : (import.meta.env.VITE_API_URL || 'http://localhost:8000');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
