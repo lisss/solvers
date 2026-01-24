@@ -6,7 +6,7 @@ from datetime import datetime
 import uuid
 from mangum import Mangum
 
-app = FastAPI(title="Agent Load Balancer API")
+app = FastAPI(title="Agent Load Balancer API", root_path="/api")
 
 # Configure CORS - ALLOW ALL for now
 app.add_middleware(
