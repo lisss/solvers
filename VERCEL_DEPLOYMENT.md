@@ -6,10 +6,8 @@ This project is configured for deployment on Vercel with the following setup:
 
 1. A Vercel account (https://vercel.com)
 2. GitHub repository connected to Vercel
-3. The following secrets configured in your GitHub repository:
+3. The following secrets must be configured in your GitHub repository:
    - `VERCEL_TOKEN` - Your Vercel API token
-   - `VERCEL_ORG_ID` - Your Vercel organization ID
-   - `VERCEL_PROJECT_ID` - Your Vercel project ID
 
 ## Getting Your Vercel Credentials
 
@@ -41,8 +39,6 @@ cat .vercel/project.json
 3. Click "New repository secret"
 4. Add the following secrets:
    - Name: `VERCEL_TOKEN`, Value: [your token from step 1]
-   - Name: `VERCEL_ORG_ID`, Value: [from .vercel/project.json]
-   - Name: `VERCEL_PROJECT_ID`, Value: [from .vercel/project.json]
 
 ## Deployment
 
