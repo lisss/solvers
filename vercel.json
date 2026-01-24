@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "backend/api/index.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     },
     {
@@ -11,16 +11,6 @@
       "config": {
         "distDir": "dist"
       }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/backend/api/index.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/frontend/$1"
     }
   ]
 }
