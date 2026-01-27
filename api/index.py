@@ -1,11 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Dict, List, Optional
 from datetime import datetime
 import uuid
-from mangum import Mangum
-
 app = FastAPI(title="Agent Load Balancer API", root_path="/api")
 
 # Configure CORS - ALLOW ALL for now
@@ -54,8 +52,8 @@ class CreateRequestRequest(BaseModel):
 
 
 # In-memory storage
-agents_db: dict[str, Agent] = {}
-requests_db: dict[str, Request] = {}
+agents_db: Dict[str, Agent] = {}
+requests_db: Dict[str, Request] = {}
 
 
 @app.get("/")
@@ -188,9 +186,6 @@ async def get_stats():
         "utilization": round((total_capacity - available_capacity) / total_capacity * 100, 2) if total_capacity > 0 else 0
     }
 
-
-# Vercel serverless handler
-handler = Mangum(app, lifespan="off")
 
 if __name__ == "__main__":
     import uvicorn
