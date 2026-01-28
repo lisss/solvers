@@ -3,7 +3,7 @@ import axios from 'axios';
 // Detect if we're on Vercel or localhost
 const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 const API_BASE_URL = isProduction 
-  ? 'https://solvers-one.vercel.app/api'
+  ? '/api'
   : (import.meta.env.VITE_API_URL || 'http://localhost:8000');
 
 const api = axios.create({
