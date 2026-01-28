@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { agentApi, requestApi, statsApi, Agent, Request, Stats } from './api';
 import './index.css';
 
@@ -10,6 +10,9 @@ const App: React.FC = () => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+  const lastAgentsJson = useRef<string>('');
+  const lastRequestsJson = useRef<string>('');
+  const lastStatsJson = useRef<string>('');
 
   const [newAgentName, setNewAgentName] = useState('');
   const [newAgentMaxRequests, setNewAgentMaxRequests] = useState(DEFAULT_MAX_REQUESTS);
@@ -29,9 +32,21 @@ const App: React.FC = () => {
         requestApi.getRequests(),
         statsApi.getStats(),
       ]);
-      setAgents(agentsRes.data);
-      setRequests(requestsRes.data);
-      setStats(statsRes.data);
+      const agentsJson = JSON.stringify(agentsRes.data);
+      if (agentsJson !== lastAgentsJson.current) {
+        lastAgentsJson.current = agentsJson;
+        setAgents(agentsRes.data);
+      }
+      const requestsJson = JSON.stringify(requestsRes.data);
+      if (requestsJson !== lastRequestsJson.current) {
+        lastRequestsJson.current = requestsJson;
+        setRequests(requestsRes.data);
+      }
+      const statsJson = JSON.stringify(statsRes.data);
+      if (statsJson !== lastStatsJson.current) {
+        lastStatsJson.current = statsJson;
+        setStats(statsRes.data);
+      }
     } catch (err: any) {
       setError(`Failed to load data: ${err.response?.data?.detail || err.message}`);
     }
