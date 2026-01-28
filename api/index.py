@@ -1,13 +1,12 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional
 from datetime import datetime
-import os
 import uuid
 
 app = FastAPI(title="Agent Load Balancer API")
-API_PREFIX = "/api" if os.environ.get("VERCEL") else ""
+router = APIRouter()
 
 # Configure CORS - ALLOW ALL for now
 app.add_middleware(
@@ -59,12 +58,12 @@ agents_db: Dict[str, Agent] = {}
 requests_db: Dict[str, Request] = {}
 
 
-@app.get(f"{API_PREFIX}/")
+@router.get("/")
 async def root():
     return {"message": "Agent Load Balancer API", "version": "1.0"}
 
 
-@app.post(f"{API_PREFIX}/agents", response_model=Agent)
+@router.post("/agents", response_model=Agent)
 async def create_agent(agent_request: CreateAgentRequest):
     agent_id = str(uuid.uuid4())
     agent = Agent(
@@ -77,19 +76,19 @@ async def create_agent(agent_request: CreateAgentRequest):
     return agent
 
 
-@app.get(f"{API_PREFIX}/agents", response_model=List[Agent])
+@router.get("/agents", response_model=List[Agent])
 async def get_agents():
     return list(agents_db.values())
 
 
-@app.get(f"{API_PREFIX}/agents/{{agent_id}}", response_model=Agent)
+@router.get("/agents/{agent_id}", response_model=Agent)
 async def get_agent(agent_id: str):
     if agent_id not in agents_db:
         raise HTTPException(status_code=404, detail="Agent not found")
     return agents_db[agent_id]
 
 
-@app.delete(f"{API_PREFIX}/agents/{{agent_id}}")
+@router.delete("/agents/{agent_id}")
 async def delete_agent(agent_id: str):
     if agent_id not in agents_db:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -113,7 +112,7 @@ def find_most_available_agent() -> Optional[Agent]:
     return most_available
 
 
-@app.post(f"{API_PREFIX}/requests", response_model=Request)
+@router.post("/requests", response_model=Request)
 async def create_request(request_data: CreateRequestRequest):
     agent = find_most_available_agent()
     if not agent:
@@ -136,19 +135,19 @@ async def create_request(request_data: CreateRequestRequest):
     return request
 
 
-@app.get(f"{API_PREFIX}/requests", response_model=List[Request])
+@router.get("/requests", response_model=List[Request])
 async def get_requests():
     return list(requests_db.values())
 
 
-@app.get(f"{API_PREFIX}/requests/{{request_id}}", response_model=Request)
+@router.get("/requests/{request_id}", response_model=Request)
 async def get_request(request_id: str):
     if request_id not in requests_db:
         raise HTTPException(status_code=404, detail="Request not found")
     return requests_db[request_id]
 
 
-@app.post(f"{API_PREFIX}/requests/{{request_id}}/complete")
+@router.post("/requests/{request_id}/complete")
 async def complete_request(request_id: str):
     if request_id not in requests_db:
         raise HTTPException(status_code=404, detail="Request not found")
@@ -168,7 +167,7 @@ async def complete_request(request_id: str):
     return request
 
 
-@app.get(f"{API_PREFIX}/stats")
+@router.get("/stats")
 async def get_stats():
     total_agents = len(agents_db)
     total_requests = len(requests_db)
@@ -192,6 +191,9 @@ async def get_stats():
         ),
     }
 
+
+app.include_router(router)
+app.include_router(router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn
