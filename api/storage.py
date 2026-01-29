@@ -1,6 +1,7 @@
 """
 Simple storage layer: Uses Vercel KV when available, falls back to dict
 """
+
 import os
 import json
 from typing import Dict, List, Optional
@@ -13,6 +14,7 @@ USE_KV = KV_URL and KV_TOKEN
 if USE_KV:
     try:
         from upstash_redis import Redis
+
         kv = Redis(url=KV_URL, token=KV_TOKEN)
         print("✅ Using Vercel KV - data will persist!")
     except Exception as e:
@@ -26,30 +28,30 @@ else:
 
 class Storage:
     """Simple key-value storage that works with KV or in-memory dict"""
-    
+
     def __init__(self):
         if not USE_KV:
             self._memory = {}
-    
+
     def set(self, key: str, value: str) -> None:
         if USE_KV:
             kv.set(key, value)
         else:
             self._memory[key] = value
-    
+
     def get(self, key: str) -> Optional[str]:
         if USE_KV:
             result = kv.get(key)
             return result.decode() if isinstance(result, bytes) else result
         else:
             return self._memory.get(key)
-    
+
     def delete(self, key: str) -> None:
         if USE_KV:
             kv.delete(key)
         else:
             self._memory.pop(key, None)
-    
+
     def keys(self, pattern: str = "*") -> List[str]:
         if USE_KV:
             keys = kv.keys(pattern)

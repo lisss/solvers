@@ -16,6 +16,7 @@ USE_KV = KV_URL and KV_TOKEN
 if USE_KV:
     try:
         from upstash_redis import Redis
+
         kv = Redis(url=KV_URL, token=KV_TOKEN)
         print("✅ Using Vercel KV - data will persist!")
     except Exception as e:
@@ -29,29 +30,30 @@ else:
 
 class Storage:
     """Simple key-value storage"""
+
     def __init__(self):
         if not USE_KV:
             self._memory = {}
-    
+
     def set(self, key: str, value: str) -> None:
         if USE_KV:
             kv.set(key, value)
         else:
             self._memory[key] = value
-    
+
     def get(self, key: str) -> Optional[str]:
         if USE_KV:
             result = kv.get(key)
             return result.decode() if isinstance(result, bytes) else result
         else:
             return self._memory.get(key)
-    
+
     def delete(self, key: str) -> None:
         if USE_KV:
             kv.delete(key)
         else:
             self._memory.pop(key, None)
-    
+
     def keys(self, pattern: str = "*") -> List[str]:
         if USE_KV:
             keys = kv.keys(pattern)
@@ -147,11 +149,11 @@ def find_most_available_agent() -> Optional[Agent]:
     agents = list_agents()
     if not agents:
         return None
-    
+
     available_agents = [a for a in agents if len(a.current_requests) < a.max_requests]
     if not available_agents:
         return None
-    
+
     return max(available_agents, key=lambda a: a.max_requests - len(a.current_requests))
 
 
@@ -168,7 +170,7 @@ async def create_agent(agent_request: CreateAgentRequest):
         "id": agent_id,
         "name": agent_request.name,
         "max_requests": agent_request.max_requests,
-        "current_requests": []
+        "current_requests": [],
     }
     storage.set(f"agent:{agent_id}", json.dumps(agent_data))
     return Agent(**agent_data)
@@ -192,13 +194,13 @@ async def delete_agent(agent_id: str):
     agent = get_agent(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    
+
     if len(agent.current_requests) > 0:
         raise HTTPException(
             status_code=400,
             detail=f"Cannot delete agent with active requests. Agent has {len(agent.current_requests)} active request(s)",
         )
-    
+
     storage.delete(f"agent:{agent_id}")
     return {"message": "Agent deleted successfully"}
 
@@ -211,7 +213,7 @@ async def create_request(request_data: CreateRequestRequest):
             status_code=503,
             detail="No available agents. All agents are at capacity.",
         )
-    
+
     request_id = str(uuid.uuid4())
     request_obj = {
         "id": request_id,
@@ -220,7 +222,7 @@ async def create_request(request_data: CreateRequestRequest):
         "assigned_agent_id": agent.id,
         "status": "processing",
         "created_at": datetime.utcnow().isoformat(),
-        "completed_at": None
+        "completed_at": None,
     }
     storage.set(f"request:{request_id}", json.dumps(request_obj))
     return Request(**request_obj)
@@ -250,15 +252,15 @@ async def complete_request(request_id: str):
     data = storage.get(f"request:{request_id}")
     if not data:
         raise HTTPException(status_code=404, detail="Request not found")
-    
+
     req_dict = json.loads(data)
     if req_dict["status"] == "completed":
         raise HTTPException(status_code=400, detail="Request already completed")
-    
+
     req_dict["status"] = "completed"
     req_dict["completed_at"] = datetime.utcnow().isoformat()
     storage.set(f"request:{request_id}", json.dumps(req_dict))
-    
+
     return Request(**req_dict)
 
 
@@ -266,20 +268,20 @@ async def complete_request(request_id: str):
 async def get_stats():
     agents = list_agents()
     total_agents = len(agents)
-    
+
     requests = []
     for key in storage.keys("request:*"):
         data = storage.get(key)
         if data:
             requests.append(json.loads(data))
-    
+
     total_requests = len(requests)
     active_requests = len([r for r in requests if r["status"] == "processing"])
     completed_requests = len([r for r in requests if r["status"] == "completed"])
-    
+
     total_capacity = sum(a.max_requests for a in agents)
     available_capacity = sum(a.max_requests - len(a.current_requests) for a in agents)
-    
+
     return {
         "total_agents": total_agents,
         "total_requests": total_requests,
