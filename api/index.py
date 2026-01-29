@@ -14,7 +14,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
     # Fallback to in-memory SQLite for Vercel if no DATABASE_URL
     DATABASE_URL = "sqlite:///:memory:"
-    
+
 IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
 engine = create_engine(
@@ -46,7 +46,10 @@ class RequestModel(Base):
 
 
 # Initialize app
-app = FastAPI(title="Agent Load Balancer API", root_path="/api", )
+app = FastAPI(
+    title="Agent Load Balancer API",
+    root_path="/api",
+)
 
 app.add_middleware(
     CORSMiddleware,
