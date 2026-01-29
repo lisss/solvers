@@ -9,32 +9,15 @@ from sqlalchemy import Column, DateTime, String, Integer, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from typing import Dict, List, Optional
 
-# Database setup
-DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
-if not DATABASE_URL:
-    # Fallback to in-memory SQLite if no DATABASE_URL
-    DATABASE_URL = "sqlite:///:memory:"
-    print("WARNING: Using in-memory SQLite. Data will not persist!")
-    
+# Database setup - Simple in-memory for Vercel (like black-lodge)
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///:memory:")
 IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
-# For Vercel Postgres, ensure proper connection pooling
-engine_kwargs = {
-    "pool_pre_ping": True,
-}
-
-if IS_SQLITE:
-    engine_kwargs["connect_args"] = {"check_same_thread": False}
-else:
-    # Postgres connection pooling for serverless
-    engine_kwargs.update({
-        "pool_size": 5,
-        "max_overflow": 10,
-        "pool_recycle": 3600,
-        "pool_pre_ping": True,
-    })
-
-engine = create_engine(DATABASE_URL, **engine_kwargs)
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if IS_SQLITE else {},
+    pool_pre_ping=True,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
