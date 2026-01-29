@@ -41,7 +41,7 @@ class RequestModel(Base):
 
 
 # Initialize app
-app = FastAPI(title="Agent Load Balancer API", root_path="/api")
+app = FastAPI(title="Agent Load Balancer API", root_path="/api", )
 
 app.add_middleware(
     CORSMiddleware,
@@ -295,9 +295,7 @@ async def get_stats():
     with SessionLocal() as db:
         total_agents = db.query(AgentModel).count()
         total_requests = db.query(RequestModel).count()
-        active_requests = (
-            db.query(RequestModel).filter(RequestModel.status == "processing").count()
-        )
+        active_requests = db.query(RequestModel).filter(RequestModel.status == "processing").count()
         completed_requests = (
             db.query(RequestModel).filter(RequestModel.status == "completed").count()
         )
