@@ -10,12 +10,17 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from typing import Dict, List, Optional
 
 # Database setup
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./data.db")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    # Fallback to in-memory SQLite for Vercel if no DATABASE_URL
+    DATABASE_URL = "sqlite:///:memory:"
+    
 IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
 engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False} if IS_SQLITE else {},
+    pool_pre_ping=True,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
