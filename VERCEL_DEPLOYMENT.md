@@ -62,21 +62,33 @@ vercel
 
 1. **Backend API**: The backend runs as serverless functions on Vercel
 2. **Frontend**: Static files served from Vercel's CDN
-3. **Data Persistence**: The current implementation uses in-memory storage. For production, integrate a database (e.g., Vercel Postgres, MongoDB Atlas)
+3. **Data Persistence**: The backend requires a database. Locally it uses SQLite; on Vercel set `DATABASE_URL` to a Postgres instance.
 4. **CORS**: Already configured to accept all origins in development. Update for production.
 
 ## Environment Variables
 
-You can set additional environment variables in Vercel dashboard:
-- Go to Project Settings → Environment Variables
-- Add any custom variables your app needs
+### Required Environment Variables (Vercel)
+Set the following in Vercel → Project Settings → Environment Variables:
+
+- `DATABASE_URL` (Postgres connection string)
+
+Example:
+```
+DATABASE_URL=postgres://user:pass@host:5432/dbname
+```
+
+### Vercel Postgres (quick setup)
+1. In Vercel dashboard, open your project.
+2. Go to **Storage** → **Postgres** → **Create**.
+3. After creation, Vercel will offer to add environment variables to the project.
+4. Ensure `DATABASE_URL` is added to **Production** (and Preview if needed).
 
 ## Limitations
 
 Vercel serverless functions have some limitations:
 - 10-second execution timeout (Hobby plan)
-- No persistent storage between requests
-- Consider using Vercel KV or external database for production
+- No local filesystem persistence between requests
+- Use Postgres/SQL storage for persistence (this project relies on `DATABASE_URL`)
 
 ## Alternative: Deploy with Docker
 

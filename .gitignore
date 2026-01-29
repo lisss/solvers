@@ -38,6 +38,9 @@ dist-ssr/
 .env.local
 .env.*.local
 
+# Local data
+backend/data/
+
 # IDE
 .vscode/
 .idea/

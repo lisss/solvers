@@ -25,7 +25,7 @@ const App: React.FC = () => {
     setSuccess('');
   };
 
-  const loadData = async () => {
+  const loadData = async (forceUpdate = false) => {
     try {
       const [agentsRes, requestsRes, statsRes] = await Promise.all([
         agentApi.getAgents(),
@@ -33,17 +33,17 @@ const App: React.FC = () => {
         statsApi.getStats(),
       ]);
       const agentsJson = JSON.stringify(agentsRes.data);
-      if (agentsJson !== lastAgentsJson.current) {
+      if (forceUpdate || agentsJson !== lastAgentsJson.current) {
         lastAgentsJson.current = agentsJson;
         setAgents(agentsRes.data);
       }
       const requestsJson = JSON.stringify(requestsRes.data);
-      if (requestsJson !== lastRequestsJson.current) {
+      if (forceUpdate || requestsJson !== lastRequestsJson.current) {
         lastRequestsJson.current = requestsJson;
         setRequests(requestsRes.data);
       }
       const statsJson = JSON.stringify(statsRes.data);
-      if (statsJson !== lastStatsJson.current) {
+      if (forceUpdate || statsJson !== lastStatsJson.current) {
         lastStatsJson.current = statsJson;
         setStats(statsRes.data);
       }
@@ -72,7 +72,7 @@ const App: React.FC = () => {
       setSuccess('Agent created successfully');
       setNewAgentName('');
       setNewAgentMaxRequests(2);
-      await loadData();
+      await loadData(true); // Force immediate update
     } catch (err: any) {
       setError(`Failed to create agent: ${err.response?.data?.detail || err.message}`);
     }
@@ -88,7 +88,7 @@ const App: React.FC = () => {
     try {
       await agentApi.deleteAgent(id);
       setSuccess('Agent deleted successfully');
-      await loadData();
+      await loadData(true); // Force immediate update
     } catch (err: any) {
       setError(`Failed to delete agent: ${err.response?.data?.detail || err.message}`);
     }
@@ -108,7 +108,7 @@ const App: React.FC = () => {
       setSuccess('Request created and assigned to agent');
       setNewRequestCustomer('');
       setNewRequestDescription('');
-      await loadData();
+      await loadData(true); // Force immediate update
     } catch (err: any) {
       setError(`Failed to create request: ${err.response?.data?.detail || err.message}`);
     }
@@ -120,7 +120,7 @@ const App: React.FC = () => {
     try {
       await requestApi.completeRequest(id);
       setSuccess('Request completed');
-      await loadData();
+      await loadData(true); // Force immediate update
     } catch (err: any) {
       setError(`Failed to complete request: ${err.response?.data?.detail || err.message}`);
     }
