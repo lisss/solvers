@@ -10,13 +10,29 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from typing import Dict, List, Optional
 
 # Database setup
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./data.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./data/data.db")
 IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False} if IS_SQLITE else {},
-)
+# Ensure data directory exists for SQLite
+if IS_SQLITE and "data.db" in DATABASE_URL:
+    import pathlib
+    pathlib.Path("./data").mkdir(exist_ok=True)
+
+engine_kwargs = {
+    "pool_pre_ping": True,
+}
+
+if IS_SQLITE:
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # Postgres connection pooling
+    engine_kwargs.update({
+        "pool_size": 5,
+        "max_overflow": 10,
+        "pool_recycle": 3600,
+    })
+
+engine = create_engine(DATABASE_URL, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
