@@ -35,6 +35,7 @@ else:
 # Global storage that persists across requests in the same instance
 _global_memory = {}
 
+
 class Storage:
     """Simple key-value storage"""
 
