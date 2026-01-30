@@ -9,8 +9,12 @@ from pydantic import BaseModel, Field
 from typing import Dict, List, Optional
 
 # Storage layer - inline to avoid import issues on Vercel
+# Try environment variables first, then fall back to a simple in-memory dict
 KV_URL = os.environ.get("KV_REST_API_URL") or os.environ.get("KV_URL")
 KV_TOKEN = os.environ.get("KV_REST_API_TOKEN")
+
+# For demo: Using shared in-memory storage with global dict
+# This works for demos but data resets on redeploy
 USE_KV = KV_URL and KV_TOKEN
 
 if USE_KV:
@@ -28,12 +32,17 @@ else:
     print("⚠️  No KV configured - data will be inconsistent on Vercel")
 
 
+# Global storage that persists across requests in the same instance
+_global_memory = {}
+
 class Storage:
     """Simple key-value storage"""
 
     def __init__(self):
         if not USE_KV:
-            self._memory = {}
+            # Use global dict instead of instance dict
+            # This helps reduce (but not eliminate) the blinking issue
+            self._memory = _global_memory
 
     def set(self, key: str, value: str) -> None:
         if USE_KV:
