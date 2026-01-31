@@ -2,88 +2,136 @@ from datetime import datetime
 import os
 import uuid
 import json
+import urllib.request
+import urllib.error
+import base64
+from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional
 
-# Storage layer - inline to avoid import issues on Vercel
-# Try environment variables first, then fall back to a simple in-memory dict
-KV_URL = os.environ.get("KV_REST_API_URL") or os.environ.get("KV_URL")
-KV_TOKEN = os.environ.get("KV_REST_API_TOKEN")
+# Use GitHub repo as storage - commit data.json on every change
+# This requires a GitHub token with repo access
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+REPO = "lisss/solvers"
+DATA_FILE = "data/storage.json"
 
-# For demo: Using shared in-memory storage with global dict
-# This works for demos but data resets on redeploy
-USE_KV = KV_URL and KV_TOKEN
-
-if USE_KV:
-    try:
-        from upstash_redis import Redis
-
-        kv = Redis(url=KV_URL, token=KV_TOKEN)
-        print("✅ Using Vercel KV - data will persist!")
-    except Exception as e:
-        print(f"⚠️  KV connection failed: {e}, falling back to in-memory")
-        USE_KV = False
-        kv = None
-else:
-    kv = None
-    print("⚠️  No KV configured - data will be inconsistent on Vercel")
-
-
-# Global storage that persists across requests in the same instance
-_global_memory = {}
-
-
-class Storage:
-    """Simple key-value storage"""
-
+class GitHubStorage:
+    """Storage backend using GitHub repo"""
+    
     def __init__(self):
-        if not USE_KV:
-            # Use global dict instead of instance dict
-            # This helps reduce (but not eliminate) the blinking issue
-            self._memory = _global_memory
+        self.token = GITHUB_TOKEN
+        self.repo = REPO
+        self.file_path = DATA_FILE
+        self.cache = {"agents": {}, "requests": {}}
+        self.sha = None
+        
+    def _api_call(self, method: str, url: str, data: dict = None):
+        """Make GitHub API call"""
+        if not self.token:
+            return None
+            
+        headers = {
+            "Authorization": f"token {self.token}",
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            req_data = json.dumps(data).encode('utf-8') if data else None
+            request = urllib.request.Request(url, data=req_data, headers=headers, method=method)
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return json.loads(response.read().decode('utf-8'))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+            print(f"GitHub API error: {e.code}")
+            return None
+        except Exception as e:
+            print(f"GitHub API error: {e}")
+            return None
+    
+    def load(self) -> dict:
+        """Load data from GitHub"""
+        if not self.token:
+            return self.cache
+            
+        url = f"https://api.github.com/repos/{self.repo}/contents/{self.file_path}"
+        result = self._api_call("GET", url)
+        
+        if result and "content" in result:
+            self.sha = result["sha"]
+            content = base64.b64decode(result["content"]).decode('utf-8')
+            try:
+                self.cache = json.loads(content)
+                return self.cache
+            except:
+                return self.cache
+        return self.cache
+    
+    def save(self, data: dict):
+        """Save data to GitHub"""
+        if not self.token:
+            self.cache = data
+            return
+            
+        self.cache = data
+        
+        # Get current SHA if we don't have it
+        if not self.sha:
+            url = f"https://api.github.com/repos/{self.repo}/contents/{self.file_path}"
+            result = self._api_call("GET", url)
+            if result and "sha" in result:
+                self.sha = result["sha"]
+        
+        # Commit the file
+        url = f"https://api.github.com/repos/{self.repo}/contents/{self.file_path}"
+        content = base64.b64encode(json.dumps(data, indent=2).encode('utf-8')).decode('utf-8')
+        
+        payload = {
+            "message": "Update storage",
+            "content": content
+        }
+        
+        if self.sha:
+            payload["sha"] = self.sha
+        
+        result = self._api_call("PUT", url, payload)
+        if result and "content" in result:
+            self.sha = result["content"]["sha"]
 
-    def set(self, key: str, value: str) -> None:
-        if USE_KV:
-            kv.set(key, value)
-        else:
-            self._memory[key] = value
+# Initialize storage
+storage = GitHubStorage()
 
-    def get(self, key: str) -> Optional[str]:
-        if USE_KV:
-            result = kv.get(key)
-            return result.decode() if isinstance(result, bytes) else result
-        else:
-            return self._memory.get(key)
+# Models
+class Agent(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    max_requests: int = 2
+    current_requests: List[str] = []
+    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
-    def delete(self, key: str) -> None:
-        if USE_KV:
-            kv.delete(key)
-        else:
-            self._memory.pop(key, None)
+class Request(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    customer_name: str
+    description: str
+    agent_id: Optional[str] = None
+    status: str = "pending"  # pending, assigned, completed
+    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    completed_at: Optional[str] = None
 
-    def keys(self, pattern: str = "*") -> List[str]:
-        if USE_KV:
-            keys = kv.keys(pattern)
-            return [k.decode() if isinstance(k, bytes) else k for k in keys]
-        else:
-            if pattern == "*":
-                return list(self._memory.keys())
-            prefix = pattern.replace("*", "")
-            return [k for k in self._memory.keys() if k.startswith(prefix)]
+class CreateAgent(BaseModel):
+    name: str
+    max_requests: int = 2
 
+class CreateRequest(BaseModel):
+    customer_name: str
+    description: str
 
-storage = Storage()
+app = FastAPI(title="Agent Load Balancer API", root_path="/api")
 
-
-# Initialize app
-app = FastAPI(
-    title="Agent Load Balancer API",
-    root_path="/api",
-)
-
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -92,222 +140,213 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize storage on startup"""
+    if GITHUB_TOKEN:
+        print(f"🚀 Using GitHub repo storage: {REPO}")
+        storage.load()  # Pre-load data
+    else:
+        print(f"⚠️  No GITHUB_TOKEN - using in-memory (will be inconsistent)")
 
-# Pydantic models
-class Agent(BaseModel):
-    id: str
-    name: str
-    max_requests: int = Field(default=2, ge=1)
-    current_requests: List[str] = Field(default_factory=list)
-
-
-class Request(BaseModel):
-    id: str
-    customer_name: str
-    description: str
-    assigned_agent_id: Optional[str] = None
-    status: str = "pending"
-    created_at: datetime
-    completed_at: Optional[datetime] = None
-
-
-class CreateAgentRequest(BaseModel):
-    name: str
-    max_requests: int = Field(default=2, ge=1)
-
-
-class CreateRequestRequest(BaseModel):
-    customer_name: str
-    description: str
-
-
-# No startup needed - storage is ready to use!
-
-
-# Helper functions
-def get_agent(agent_id: str) -> Optional[Agent]:
-    """Get agent by ID from storage"""
-    data = storage.get(f"agent:{agent_id}")
-    if not data:
-        return None
-    agent_dict = json.loads(data)
-    # Get current requests
-    current_requests = []
-    for req_key in storage.keys(f"request:*"):
-        req_data = storage.get(req_key)
-        if req_data:
-            req = json.loads(req_data)
-            if req.get("assigned_agent_id") == agent_id and req.get("status") == "processing":
-                current_requests.append(req["id"])
-    agent_dict["current_requests"] = current_requests
-    return Agent(**agent_dict)
-
-
-def list_agents() -> List[Agent]:
-    """List all agents from storage"""
-    agents = []
-    for key in storage.keys("agent:*"):
-        agent_id = key.replace("agent:", "")
-        agent = get_agent(agent_id)
-        if agent:
-            agents.append(agent)
-    return agents
-
-
-def find_most_available_agent() -> Optional[Agent]:
-    """Find agent with most available capacity"""
-    agents = list_agents()
-    if not agents:
-        return None
-
-    available_agents = [a for a in agents if len(a.current_requests) < a.max_requests]
-    if not available_agents:
-        return None
-
-    return max(available_agents, key=lambda a: a.max_requests - len(a.current_requests))
-
-
-# Routes
 @app.get("/")
 async def root():
-    return {"message": "Agent Load Balancer API", "version": "1.0"}
-
-
-@app.post("/agents", response_model=Agent)
-async def create_agent(agent_request: CreateAgentRequest):
-    agent_id = str(uuid.uuid4())
-    agent_data = {
-        "id": agent_id,
-        "name": agent_request.name,
-        "max_requests": agent_request.max_requests,
-        "current_requests": [],
-    }
-    storage.set(f"agent:{agent_id}", json.dumps(agent_data))
-    return Agent(**agent_data)
-
+    return {"message": "Agent Load Balancer API", "version": "1.0", "storage": "github" if GITHUB_TOKEN else "memory"}
 
 @app.get("/agents", response_model=List[Agent])
-async def get_agents():
-    return list_agents()
+async def list_agents():
+    """Get all agents"""
+    data = storage.load()
+    agents = list(data.get("agents", {}).values())
+    return agents
 
-
-@app.get("/agents/{agent_id}", response_model=Agent)
-async def get_agent_by_id(agent_id: str):
-    agent = get_agent(agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
+@app.post("/agents", response_model=Agent)
+async def create_agent(agent_data: CreateAgent):
+    """Create a new agent"""
+    data = storage.load()
+    
+    agent = Agent(
+        name=agent_data.name,
+        max_requests=agent_data.max_requests,
+        current_requests=[]
+    )
+    
+    if "agents" not in data:
+        data["agents"] = {}
+    data["agents"][agent.id] = agent.model_dump()
+    storage.save(data)
+    
     return agent
 
+@app.get("/agents/{agent_id}", response_model=Agent)
+async def get_agent(agent_id: str):
+    """Get a specific agent"""
+    data = storage.load()
+    agents = data.get("agents", {})
+    
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    return Agent(**agents[agent_id])
 
 @app.delete("/agents/{agent_id}")
 async def delete_agent(agent_id: str):
-    agent = get_agent(agent_id)
-    if not agent:
+    """Delete an agent"""
+    data = storage.load()
+    agents = data.get("agents", {})
+    
+    if agent_id not in agents:
         raise HTTPException(status_code=404, detail="Agent not found")
-
-    if len(agent.current_requests) > 0:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot delete agent with active requests. Agent has {len(agent.current_requests)} active request(s)",
-        )
-
-    storage.delete(f"agent:{agent_id}")
+    
+    # Also remove all requests assigned to this agent
+    requests = data.get("requests", {})
+    for req_id in list(requests.keys()):
+        if requests[req_id].get("agent_id") == agent_id:
+            requests[req_id]["agent_id"] = None
+            requests[req_id]["status"] = "pending"
+    
+    del agents[agent_id]
+    storage.save(data)
+    
     return {"message": "Agent deleted successfully"}
 
-
-@app.post("/requests", response_model=Request)
-async def create_request(request_data: CreateRequestRequest):
-    agent = find_most_available_agent()
-    if not agent:
-        raise HTTPException(
-            status_code=503,
-            detail="No available agents. All agents are at capacity.",
-        )
-
-    request_id = str(uuid.uuid4())
-    request_obj = {
-        "id": request_id,
-        "customer_name": request_data.customer_name,
-        "description": request_data.description,
-        "assigned_agent_id": agent.id,
-        "status": "processing",
-        "created_at": datetime.utcnow().isoformat(),
-        "completed_at": None,
-    }
-    storage.set(f"request:{request_id}", json.dumps(request_obj))
-    return Request(**request_obj)
-
-
 @app.get("/requests", response_model=List[Request])
-async def get_requests():
-    requests = []
-    for key in storage.keys("request:*"):
-        data = storage.get(key)
-        if data:
-            req_dict = json.loads(data)
-            requests.append(Request(**req_dict))
+async def list_requests():
+    """Get all requests"""
+    data = storage.load()
+    requests = list(data.get("requests", {}).values())
     return requests
 
+@app.post("/requests", response_model=Request)
+async def create_request(request_data: CreateRequest):
+    """Create a new customer request and assign to most available agent"""
+    data = storage.load()
+    agents = data.get("agents", {})
+    
+    # Create the request
+    request = Request(
+        customer_name=request_data.customer_name,
+        description=request_data.description,
+        status="pending"
+    )
+    
+    # Find the most available agent (with least current requests and capacity)
+    best_agent_id = None
+    min_load = float('inf')
+    
+    for agent_id, agent_data in agents.items():
+        current_count = len(agent_data.get("current_requests", []))
+        max_requests = agent_data.get("max_requests", 2)
+        
+        # Skip agents that are at capacity
+        if current_count >= max_requests:
+            continue
+        
+        # Choose agent with lowest current load
+        if current_count < min_load:
+            min_load = current_count
+            best_agent_id = agent_id
+    
+    # Assign to best agent if found
+    if best_agent_id:
+        request.agent_id = best_agent_id
+        request.status = "assigned"
+        
+        # Add request to agent's current_requests
+        if "current_requests" not in agents[best_agent_id]:
+            agents[best_agent_id]["current_requests"] = []
+        agents[best_agent_id]["current_requests"].append(request.id)
+    
+    # Save the request
+    if "requests" not in data:
+        data["requests"] = {}
+    data["requests"][request.id] = request.model_dump()
+    
+    storage.save(data)
+    
+    return request
 
 @app.get("/requests/{request_id}", response_model=Request)
 async def get_request(request_id: str):
-    data = storage.get(f"request:{request_id}")
-    if not data:
+    """Get a specific request"""
+    data = storage.load()
+    requests = data.get("requests", {})
+    
+    if request_id not in requests:
         raise HTTPException(status_code=404, detail="Request not found")
-    return Request(**json.loads(data))
-
+    
+    return Request(**requests[request_id])
 
 @app.post("/requests/{request_id}/complete")
 async def complete_request(request_id: str):
-    data = storage.get(f"request:{request_id}")
-    if not data:
+    """Mark a request as completed and remove from agent's list"""
+    data = storage.load()
+    requests = data.get("requests", {})
+    agents = data.get("agents", {})
+    
+    if request_id not in requests:
         raise HTTPException(status_code=404, detail="Request not found")
+    
+    request = requests[request_id]
+    agent_id = request.get("agent_id")
+    
+    # Update request status
+    request["status"] = "completed"
+    request["completed_at"] = datetime.utcnow().isoformat()
+    
+    # Remove from agent's current_requests
+    if agent_id and agent_id in agents:
+        current_requests = agents[agent_id].get("current_requests", [])
+        if request_id in current_requests:
+            current_requests.remove(request_id)
+            agents[agent_id]["current_requests"] = current_requests
+    
+    storage.save(data)
+    
+    return Request(**request)
 
-    req_dict = json.loads(data)
-    if req_dict["status"] == "completed":
-        raise HTTPException(status_code=400, detail="Request already completed")
-
-    req_dict["status"] = "completed"
-    req_dict["completed_at"] = datetime.utcnow().isoformat()
-    storage.set(f"request:{request_id}", json.dumps(req_dict))
-
-    return Request(**req_dict)
-
+@app.delete("/requests/{request_id}")
+async def delete_request(request_id: str):
+    """Delete a request"""
+    data = storage.load()
+    requests = data.get("requests", {})
+    agents = data.get("agents", {})
+    
+    if request_id not in requests:
+        raise HTTPException(status_code=404, detail="Request not found")
+    
+    request = requests[request_id]
+    agent_id = request.get("agent_id")
+    
+    # Remove from agent's current_requests
+    if agent_id and agent_id in agents:
+        current_requests = agents[agent_id].get("current_requests", [])
+        if request_id in current_requests:
+            current_requests.remove(request_id)
+            agents[agent_id]["current_requests"] = current_requests
+    
+    del requests[request_id]
+    storage.save(data)
+    
+    return {"message": "Request deleted successfully"}
 
 @app.get("/stats")
 async def get_stats():
-    agents = list_agents()
-    total_agents = len(agents)
-
-    requests = []
-    for key in storage.keys("request:*"):
-        data = storage.get(key)
-        if data:
-            requests.append(json.loads(data))
-
-    total_requests = len(requests)
-    active_requests = len([r for r in requests if r["status"] == "processing"])
-    completed_requests = len([r for r in requests if r["status"] == "completed"])
-
-    total_capacity = sum(a.max_requests for a in agents)
-    available_capacity = sum(a.max_requests - len(a.current_requests) for a in agents)
-
+    """Get system statistics"""
+    data = storage.load()
+    agents = data.get("agents", {})
+    requests = data.get("requests", {})
+    
+    total_capacity = sum(a.get("max_requests", 2) for a in agents.values())
+    total_assigned = sum(len(a.get("current_requests", [])) for a in agents.values())
+    
     return {
-        "total_agents": total_agents,
-        "total_requests": total_requests,
-        "active_requests": active_requests,
-        "completed_requests": completed_requests,
-        "available_capacity": available_capacity,
+        "total_agents": len(agents),
+        "total_requests": len(requests),
         "total_capacity": total_capacity,
-        "utilization": (
-            round((total_capacity - available_capacity) / total_capacity * 100, 2)
-            if total_capacity > 0
-            else 0
-        ),
+        "total_assigned": total_assigned,
+        "available_capacity": total_capacity - total_assigned
     }
 
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# For Vercel serverless
+handler = app

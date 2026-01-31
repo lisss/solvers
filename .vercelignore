@@ -1,0 +1,8 @@
+backend/
+api/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.db
+data/
