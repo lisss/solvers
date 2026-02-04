@@ -34,7 +34,7 @@ class CreateRequest(BaseModel):
     customer_name: str
     description: str
 
-app = FastAPI(title="Agent Load Balancer API")
+app = FastAPI(title="Agent Load Balancer API", root_path="/api")
 
 # Configure CORS
 app.add_middleware(
