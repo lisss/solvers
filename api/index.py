@@ -5,8 +5,6 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from mangum import Mangum
-
 # In-memory storage
 agents_db = {}
 requests_db = {}
@@ -168,5 +166,5 @@ async def get_stats():
         "available_capacity": total_capacity - total_assigned
     }
 
-# For Vercel serverless
-handler = Mangum(app, lifespan="off")
+# For Vercel serverless - FastAPI is natively supported
+app
