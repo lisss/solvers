@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from mangum import Mangum
 
 # Use GitHub repo as storage - commit data.json on every change
 # This requires a GitHub token with repo access
@@ -342,5 +343,4 @@ async def get_stats():
     }
 
 # For Vercel serverless
-from mangum import Mangum
-handler = Mangum(app)
+handler = Mangum(app, lifespan="off")
