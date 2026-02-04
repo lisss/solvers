@@ -342,4 +342,5 @@ async def get_stats():
     }
 
 # For Vercel serverless
-handler = app
+from mangum import Mangum
+handler = Mangum(app)
