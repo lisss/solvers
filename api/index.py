@@ -140,14 +140,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize storage on startup"""
-    if GITHUB_TOKEN:
-        print(f"🚀 Using GitHub repo storage: {REPO}")
-        storage.load()  # Pre-load data
-    else:
-        print(f"⚠️  No GITHUB_TOKEN - using in-memory (will be inconsistent)")
+# Startup initialization removed - not compatible with serverless
 
 @app.get("/")
 async def root():
