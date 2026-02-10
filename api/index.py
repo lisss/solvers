@@ -15,12 +15,12 @@ class Storage:
         # Try Vercel KV first
         self.kv_url = os.getenv("KV_REST_API_URL")
         self.kv_token = os.getenv("KV_REST_API_TOKEN")
-        
+
         # Fallback to Upstash Redis
         if not self.kv_url:
             self.kv_url = os.getenv("UPSTASH_REDIS_REST_URL")
             self.kv_token = os.getenv("UPSTASH_REDIS_REST_TOKEN")
-        
+
         self.memory_agents = {}
         self.memory_requests = {}
 
