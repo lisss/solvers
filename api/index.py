@@ -172,6 +172,14 @@ async def root():
     return {"message": "Agent Load Balancer API", "version": "1.0"}
 
 
+@app.get("/debug")
+async def debug():
+    return {
+        "supabase_configured": bool(storage.supabase_url and storage.supabase_key),
+        "supabase_url": storage.supabase_url[:30] + "..." if storage.supabase_url else None,
+    }
+
+
 @app.get("/agents", response_model=List[Agent])
 async def list_agents():
     agents_db = await storage.get_agents()
