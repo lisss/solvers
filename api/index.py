@@ -62,7 +62,7 @@ class Storage:
                                 "apikey": self.supabase_key,
                                 "Authorization": f"Bearer {self.supabase_key}",
                                 "Content-Type": "application/json",
-                                "Prefer": "resolution=merge-duplicates",
+                                "Prefer": "resolution=merge-duplicates,return=representation",
                             },
                             json=rows,
                         )
@@ -111,7 +111,7 @@ class Storage:
                                 "apikey": self.supabase_key,
                                 "Authorization": f"Bearer {self.supabase_key}",
                                 "Content-Type": "application/json",
-                                "Prefer": "resolution=merge-duplicates",
+                                "Prefer": "resolution=merge-duplicates,return=representation",
                             },
                             json=rows,
                         )
