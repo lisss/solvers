@@ -9,26 +9,64 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 
-# Storage layer - uses Vercel KV, Upstash Redis, or in-memory
+# Storage layer - uses Postgres/Supabase or Vercel KV if available, otherwise in-memory
 class Storage:
     def __init__(self):
-        # Try Vercel KV first
+        self.db_url = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
         self.kv_url = os.getenv("KV_REST_API_URL")
         self.kv_token = os.getenv("KV_REST_API_TOKEN")
-
-        # Fallback to Upstash Redis
-        if not self.kv_url:
-            self.kv_url = os.getenv("UPSTASH_REDIS_REST_URL")
-            self.kv_token = os.getenv("UPSTASH_REDIS_REST_TOKEN")
-
         self.memory_agents = {}
         self.memory_requests = {}
+        self.db_conn = None
+        
+        # Initialize Postgres if available
+        if self.db_url:
+            try:
+                import psycopg2
+                import psycopg2.extras
+                self.db_conn = psycopg2.connect(self.db_url)
+                self._init_db()
+            except Exception as e:
+                print(f"DB connection failed: {e}")
+                self.db_conn = None
+    
+    def _init_db(self):
+        """Initialize database tables"""
+        if not self.db_conn:
+            return
+        try:
+            with self.db_conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS agents (
+                        id TEXT PRIMARY KEY,
+                        data JSONB NOT NULL
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS requests (
+                        id TEXT PRIMARY KEY,
+                        data JSONB NOT NULL
+                    )
+                """)
+                self.db_conn.commit()
+        except Exception as e:
+            print(f"DB init failed: {e}")
 
     async def get_agents(self) -> Dict[str, Any]:
+        # Try Postgres first
+        if self.db_conn:
+            try:
+                with self.db_conn.cursor() as cur:
+                    cur.execute("SELECT id, data FROM agents")
+                    rows = cur.fetchall()
+                    return {row[0]: row[1] for row in rows}
+            except Exception as e:
+                print(f"DB error: {e}")
+        
+        # Fallback to KV
         if self.kv_url and self.kv_token:
             try:
                 import httpx
-
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
                         f"{self.kv_url}/get/agents",
@@ -39,13 +77,30 @@ class Storage:
                         return json.loads(result) if result else {}
             except Exception as e:
                 print(f"KV error: {e}")
+        
         return self.memory_agents
 
     async def set_agents(self, agents: Dict[str, Any]):
+        # Try Postgres first
+        if self.db_conn:
+            try:
+                with self.db_conn.cursor() as cur:
+                    # Clear and re-insert all agents
+                    cur.execute("DELETE FROM agents")
+                    for agent_id, agent_data in agents.items():
+                        cur.execute(
+                            "INSERT INTO agents (id, data) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET data = %s",
+                            (agent_id, json.dumps(agent_data), json.dumps(agent_data))
+                        )
+                    self.db_conn.commit()
+                return
+            except Exception as e:
+                print(f"DB error: {e}")
+        
+        # Fallback to KV
         if self.kv_url and self.kv_token:
             try:
                 import httpx
-
                 async with httpx.AsyncClient() as client:
                     await client.post(
                         f"{self.kv_url}/set/agents",
@@ -54,13 +109,24 @@ class Storage:
                     )
             except Exception as e:
                 print(f"KV error: {e}")
+        
         self.memory_agents = agents
 
     async def get_requests(self) -> Dict[str, Any]:
+        # Try Postgres first
+        if self.db_conn:
+            try:
+                with self.db_conn.cursor() as cur:
+                    cur.execute("SELECT id, data FROM requests")
+                    rows = cur.fetchall()
+                    return {row[0]: row[1] for row in rows}
+            except Exception as e:
+                print(f"DB error: {e}")
+        
+        # Fallback to KV
         if self.kv_url and self.kv_token:
             try:
                 import httpx
-
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
                         f"{self.kv_url}/get/requests",
@@ -71,13 +137,30 @@ class Storage:
                         return json.loads(result) if result else {}
             except Exception as e:
                 print(f"KV error: {e}")
+        
         return self.memory_requests
 
     async def set_requests(self, requests: Dict[str, Any]):
+        # Try Postgres first
+        if self.db_conn:
+            try:
+                with self.db_conn.cursor() as cur:
+                    # Clear and re-insert all requests
+                    cur.execute("DELETE FROM requests")
+                    for request_id, request_data in requests.items():
+                        cur.execute(
+                            "INSERT INTO requests (id, data) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET data = %s",
+                            (request_id, json.dumps(request_data), json.dumps(request_data))
+                        )
+                    self.db_conn.commit()
+                return
+            except Exception as e:
+                print(f"DB error: {e}")
+        
+        # Fallback to KV
         if self.kv_url and self.kv_token:
             try:
                 import httpx
-
                 async with httpx.AsyncClient() as client:
                     await client.post(
                         f"{self.kv_url}/set/requests",
@@ -86,6 +169,7 @@ class Storage:
                     )
             except Exception as e:
                 print(f"KV error: {e}")
+        
         self.memory_requests = requests
 
 
