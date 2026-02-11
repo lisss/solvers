@@ -37,11 +37,15 @@ class Storage:
                             "Authorization": f"Bearer {self.supabase_key}",
                         },
                     )
+                    print(f"Supabase GET status: {response.status_code}")
                     if response.status_code == 200:
                         rows = response.json()
+                        print(f"Supabase returned {len(rows)} rows")
                         return {row["id"]: row["data"] for row in rows}
+                    else:
+                        print(f"Supabase GET error: {response.text}")
             except Exception as e:
-                print(f"Supabase error: {e}")
+                print(f"Supabase GET exception: {e}")
         return self.memory_agents
 
     async def set_agents(self, agents: Dict[str, Any]):
