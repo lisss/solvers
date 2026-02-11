@@ -9,14 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 
-# Storage layer - uses Supabase REST API if available, otherwise in-memory  
+# Storage layer - uses Supabase REST API if available, otherwise in-memory
 class Storage:
     def __init__(self):
         self.supabase_url = os.getenv("SUPABASE_URL")
         self.supabase_key = os.getenv("SUPABASE_KEY")
         self.memory_agents = {}
         self.memory_requests = {}
-    
+
     def _init_supabase(self):
         """Initialize Supabase - tables must be created manually"""
         # Tables needed:
@@ -28,6 +28,7 @@ class Storage:
         if self.supabase_url and self.supabase_key:
             try:
                 import httpx
+
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
                         f"{self.supabase_url}/rest/v1/agents",
@@ -47,6 +48,7 @@ class Storage:
         if self.supabase_url and self.supabase_key:
             try:
                 import httpx
+
                 async with httpx.AsyncClient() as client:
                     # Delete all existing agents
                     await client.delete(
@@ -55,20 +57,23 @@ class Storage:
                             "apikey": self.supabase_key,
                             "Authorization": f"Bearer {self.supabase_key}",
                         },
-                        params={"id": "neq."}  # Delete all
+                        params={"id": "neq."},  # Delete all
                     )
                     # Insert all agents
                     if agents:
-                        rows = [{"id": agent_id, "data": agent_data} for agent_id, agent_data in agents.items()]
+                        rows = [
+                            {"id": agent_id, "data": agent_data}
+                            for agent_id, agent_data in agents.items()
+                        ]
                         await client.post(
                             f"{self.supabase_url}/rest/v1/agents",
                             headers={
                                 "apikey": self.supabase_key,
                                 "Authorization": f"Bearer {self.supabase_key}",
                                 "Content-Type": "application/json",
-                                "Prefer": "return=minimal"
+                                "Prefer": "return=minimal",
                             },
-                            json=rows
+                            json=rows,
                         )
                 return
             except Exception as e:
@@ -79,6 +84,7 @@ class Storage:
         if self.supabase_url and self.supabase_key:
             try:
                 import httpx
+
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
                         f"{self.supabase_url}/rest/v1/requests",
@@ -98,6 +104,7 @@ class Storage:
         if self.supabase_url and self.supabase_key:
             try:
                 import httpx
+
                 async with httpx.AsyncClient() as client:
                     # Delete all existing requests
                     await client.delete(
@@ -106,20 +113,23 @@ class Storage:
                             "apikey": self.supabase_key,
                             "Authorization": f"Bearer {self.supabase_key}",
                         },
-                        params={"id": "neq."}  # Delete all
+                        params={"id": "neq."},  # Delete all
                     )
                     # Insert all requests
                     if requests:
-                        rows = [{"id": request_id, "data": request_data} for request_id, request_data in requests.items()]
+                        rows = [
+                            {"id": request_id, "data": request_data}
+                            for request_id, request_data in requests.items()
+                        ]
                         await client.post(
                             f"{self.supabase_url}/rest/v1/requests",
                             headers={
                                 "apikey": self.supabase_key,
                                 "Authorization": f"Bearer {self.supabase_key}",
                                 "Content-Type": "application/json",
-                                "Prefer": "return=minimal"
+                                "Prefer": "return=minimal",
                             },
-                            json=rows
+                            json=rows,
                         )
                 return
             except Exception as e:
