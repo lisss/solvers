@@ -17,26 +17,29 @@ class Storage:
         self.kv_token = os.getenv("KV_REST_API_TOKEN")
         self.memory_agents = {}
         self.memory_requests = {}
-        self.db_conn = None
-
-        # Initialize Postgres if available
+        
+        # Initialize DB schema if we have a URL
         if self.db_url:
-            try:
-                import psycopg2
-                import psycopg2.extras
+            self._init_db()
 
-                self.db_conn = psycopg2.connect(self.db_url)
-                self._init_db()
-            except Exception as e:
-                print(f"DB connection failed: {e}")
-                self.db_conn = None
+    def _get_db_conn(self):
+        """Get a fresh database connection for each request (serverless-friendly)"""
+        if not self.db_url:
+            return None
+        try:
+            import psycopg2
+            return psycopg2.connect(self.db_url)
+        except Exception as e:
+            print(f"DB connection failed: {e}")
+            return None
 
     def _init_db(self):
         """Initialize database tables"""
-        if not self.db_conn:
+        conn = self._get_db_conn()
+        if not conn:
             return
         try:
-            with self.db_conn.cursor() as cur:
+            with conn.cursor() as cur:
                 cur.execute(
                     """
                     CREATE TABLE IF NOT EXISTS agents (
@@ -53,20 +56,25 @@ class Storage:
                     )
                 """
                 )
-                self.db_conn.commit()
+                conn.commit()
         except Exception as e:
             print(f"DB init failed: {e}")
+        finally:
+            conn.close()
 
     async def get_agents(self) -> Dict[str, Any]:
         # Try Postgres first
-        if self.db_conn:
+        conn = self._get_db_conn()
+        if conn:
             try:
-                with self.db_conn.cursor() as cur:
+                with conn.cursor() as cur:
                     cur.execute("SELECT id, data FROM agents")
                     rows = cur.fetchall()
                     return {row[0]: row[1] for row in rows}
             except Exception as e:
                 print(f"DB error: {e}")
+            finally:
+                conn.close()
 
         # Fallback to KV
         if self.kv_url and self.kv_token:
@@ -88,9 +96,10 @@ class Storage:
 
     async def set_agents(self, agents: Dict[str, Any]):
         # Try Postgres first
-        if self.db_conn:
+        conn = self._get_db_conn()
+        if conn:
             try:
-                with self.db_conn.cursor() as cur:
+                with conn.cursor() as cur:
                     # Clear and re-insert all agents
                     cur.execute("DELETE FROM agents")
                     for agent_id, agent_data in agents.items():
@@ -98,10 +107,12 @@ class Storage:
                             "INSERT INTO agents (id, data) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET data = %s",
                             (agent_id, json.dumps(agent_data), json.dumps(agent_data)),
                         )
-                    self.db_conn.commit()
+                    conn.commit()
                 return
             except Exception as e:
                 print(f"DB error: {e}")
+            finally:
+                conn.close()
 
         # Fallback to KV
         if self.kv_url and self.kv_token:
@@ -121,14 +132,17 @@ class Storage:
 
     async def get_requests(self) -> Dict[str, Any]:
         # Try Postgres first
-        if self.db_conn:
+        conn = self._get_db_conn()
+        if conn:
             try:
-                with self.db_conn.cursor() as cur:
+                with conn.cursor() as cur:
                     cur.execute("SELECT id, data FROM requests")
                     rows = cur.fetchall()
                     return {row[0]: row[1] for row in rows}
             except Exception as e:
                 print(f"DB error: {e}")
+            finally:
+                conn.close()
 
         # Fallback to KV
         if self.kv_url and self.kv_token:
@@ -150,9 +164,10 @@ class Storage:
 
     async def set_requests(self, requests: Dict[str, Any]):
         # Try Postgres first
-        if self.db_conn:
+        conn = self._get_db_conn()
+        if conn:
             try:
-                with self.db_conn.cursor() as cur:
+                with conn.cursor() as cur:
                     # Clear and re-insert all requests
                     cur.execute("DELETE FROM requests")
                     for request_id, request_data in requests.items():
@@ -160,10 +175,12 @@ class Storage:
                             "INSERT INTO requests (id, data) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET data = %s",
                             (request_id, json.dumps(request_data), json.dumps(request_data)),
                         )
-                    self.db_conn.commit()
+                    conn.commit()
                 return
             except Exception as e:
                 print(f"DB error: {e}")
+            finally:
+                conn.close()
 
         # Fallback to KV
         if self.kv_url and self.kv_token:
