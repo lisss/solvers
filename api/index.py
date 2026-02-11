@@ -178,10 +178,29 @@ async def root():
 
 @app.get("/debug")
 async def debug():
-    return {
+    result = {
         "supabase_configured": bool(storage.supabase_url and storage.supabase_key),
         "supabase_url": storage.supabase_url[:30] + "..." if storage.supabase_url else None,
     }
+    
+    # Test direct Supabase call
+    if storage.supabase_url and storage.supabase_key:
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{storage.supabase_url}/rest/v1/agents",
+                    headers={
+                        "apikey": storage.supabase_key,
+                        "Authorization": f"Bearer {storage.supabase_key}",
+                    },
+                )
+                result["supabase_status"] = response.status_code
+                result["supabase_response"] = response.json() if response.status_code == 200 else response.text
+        except Exception as e:
+            result["supabase_error"] = str(e)
+    
+    return result
 
 
 @app.get("/agents", response_model=List[Agent])
