@@ -50,31 +50,24 @@ class Storage:
                 import httpx
 
                 async with httpx.AsyncClient() as client:
-                    # Delete all existing agents
-                    await client.delete(
-                        f"{self.supabase_url}/rest/v1/agents",
-                        headers={
-                            "apikey": self.supabase_key,
-                            "Authorization": f"Bearer {self.supabase_key}",
-                        },
-                        params={"id": "neq."},  # Delete all
-                    )
-                    # Insert all agents
+                    # Upsert all agents (insert or update)
                     if agents:
                         rows = [
                             {"id": agent_id, "data": agent_data}
                             for agent_id, agent_data in agents.items()
                         ]
-                        await client.post(
+                        response = await client.post(
                             f"{self.supabase_url}/rest/v1/agents",
                             headers={
                                 "apikey": self.supabase_key,
                                 "Authorization": f"Bearer {self.supabase_key}",
                                 "Content-Type": "application/json",
-                                "Prefer": "return=minimal",
+                                "Prefer": "resolution=merge-duplicates",
                             },
                             json=rows,
                         )
+                        if response.status_code not in [200, 201]:
+                            print(f"Supabase write error: {response.status_code} - {response.text}")
                 return
             except Exception as e:
                 print(f"Supabase error: {e}")
@@ -106,31 +99,24 @@ class Storage:
                 import httpx
 
                 async with httpx.AsyncClient() as client:
-                    # Delete all existing requests
-                    await client.delete(
-                        f"{self.supabase_url}/rest/v1/requests",
-                        headers={
-                            "apikey": self.supabase_key,
-                            "Authorization": f"Bearer {self.supabase_key}",
-                        },
-                        params={"id": "neq."},  # Delete all
-                    )
-                    # Insert all requests
+                    # Upsert all requests (insert or update)
                     if requests:
                         rows = [
                             {"id": request_id, "data": request_data}
                             for request_id, request_data in requests.items()
                         ]
-                        await client.post(
+                        response = await client.post(
                             f"{self.supabase_url}/rest/v1/requests",
                             headers={
                                 "apikey": self.supabase_key,
                                 "Authorization": f"Bearer {self.supabase_key}",
                                 "Content-Type": "application/json",
-                                "Prefer": "return=minimal",
+                                "Prefer": "resolution=merge-duplicates",
                             },
                             json=rows,
                         )
+                        if response.status_code not in [200, 201]:
+                            print(f"Supabase write error: {response.status_code} - {response.text}")
                 return
             except Exception as e:
                 print(f"Supabase error: {e}")
