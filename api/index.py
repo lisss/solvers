@@ -18,36 +18,41 @@ class Storage:
         self.memory_agents = {}
         self.memory_requests = {}
         self.db_conn = None
-        
+
         # Initialize Postgres if available
         if self.db_url:
             try:
                 import psycopg2
                 import psycopg2.extras
+
                 self.db_conn = psycopg2.connect(self.db_url)
                 self._init_db()
             except Exception as e:
                 print(f"DB connection failed: {e}")
                 self.db_conn = None
-    
+
     def _init_db(self):
         """Initialize database tables"""
         if not self.db_conn:
             return
         try:
             with self.db_conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS agents (
                         id TEXT PRIMARY KEY,
                         data JSONB NOT NULL
                     )
-                """)
-                cur.execute("""
+                """
+                )
+                cur.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS requests (
                         id TEXT PRIMARY KEY,
                         data JSONB NOT NULL
                     )
-                """)
+                """
+                )
                 self.db_conn.commit()
         except Exception as e:
             print(f"DB init failed: {e}")
@@ -62,11 +67,12 @@ class Storage:
                     return {row[0]: row[1] for row in rows}
             except Exception as e:
                 print(f"DB error: {e}")
-        
+
         # Fallback to KV
         if self.kv_url and self.kv_token:
             try:
                 import httpx
+
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
                         f"{self.kv_url}/get/agents",
@@ -77,7 +83,7 @@ class Storage:
                         return json.loads(result) if result else {}
             except Exception as e:
                 print(f"KV error: {e}")
-        
+
         return self.memory_agents
 
     async def set_agents(self, agents: Dict[str, Any]):
@@ -90,17 +96,18 @@ class Storage:
                     for agent_id, agent_data in agents.items():
                         cur.execute(
                             "INSERT INTO agents (id, data) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET data = %s",
-                            (agent_id, json.dumps(agent_data), json.dumps(agent_data))
+                            (agent_id, json.dumps(agent_data), json.dumps(agent_data)),
                         )
                     self.db_conn.commit()
                 return
             except Exception as e:
                 print(f"DB error: {e}")
-        
+
         # Fallback to KV
         if self.kv_url and self.kv_token:
             try:
                 import httpx
+
                 async with httpx.AsyncClient() as client:
                     await client.post(
                         f"{self.kv_url}/set/agents",
@@ -109,7 +116,7 @@ class Storage:
                     )
             except Exception as e:
                 print(f"KV error: {e}")
-        
+
         self.memory_agents = agents
 
     async def get_requests(self) -> Dict[str, Any]:
@@ -122,11 +129,12 @@ class Storage:
                     return {row[0]: row[1] for row in rows}
             except Exception as e:
                 print(f"DB error: {e}")
-        
+
         # Fallback to KV
         if self.kv_url and self.kv_token:
             try:
                 import httpx
+
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
                         f"{self.kv_url}/get/requests",
@@ -137,7 +145,7 @@ class Storage:
                         return json.loads(result) if result else {}
             except Exception as e:
                 print(f"KV error: {e}")
-        
+
         return self.memory_requests
 
     async def set_requests(self, requests: Dict[str, Any]):
@@ -150,17 +158,18 @@ class Storage:
                     for request_id, request_data in requests.items():
                         cur.execute(
                             "INSERT INTO requests (id, data) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET data = %s",
-                            (request_id, json.dumps(request_data), json.dumps(request_data))
+                            (request_id, json.dumps(request_data), json.dumps(request_data)),
                         )
                     self.db_conn.commit()
                 return
             except Exception as e:
                 print(f"DB error: {e}")
-        
+
         # Fallback to KV
         if self.kv_url and self.kv_token:
             try:
                 import httpx
+
                 async with httpx.AsyncClient() as client:
                     await client.post(
                         f"{self.kv_url}/set/requests",
@@ -169,7 +178,7 @@ class Storage:
                     )
             except Exception as e:
                 print(f"KV error: {e}")
-        
+
         self.memory_requests = requests
 
 

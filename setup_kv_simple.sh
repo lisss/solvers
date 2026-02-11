@@ -3,6 +3,8 @@
 echo "🚀 Setting up Vercel KV..."
 echo ""
 
+# solvers_admin@
+
 # Check if user is logged in
 if ! vercel whoami &>/dev/null; then
     echo "❌ Not logged into Vercel"
