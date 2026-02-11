@@ -9,193 +9,121 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 
-# Storage layer - uses Postgres/Supabase or Vercel KV if available, otherwise in-memory
+# Storage layer - uses Supabase REST API if available, otherwise in-memory  
 class Storage:
     def __init__(self):
-        self.db_url = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
-        self.kv_url = os.getenv("KV_REST_API_URL")
-        self.kv_token = os.getenv("KV_REST_API_TOKEN")
+        self.supabase_url = os.getenv("SUPABASE_URL")
+        self.supabase_key = os.getenv("SUPABASE_KEY")
         self.memory_agents = {}
         self.memory_requests = {}
-        
-        # Initialize DB schema if we have a URL
-        if self.db_url:
-            self._init_db()
-
-    def _get_db_conn(self):
-        """Get a fresh database connection for each request (serverless-friendly)"""
-        if not self.db_url:
-            return None
-        try:
-            import psycopg2
-            return psycopg2.connect(self.db_url)
-        except Exception as e:
-            print(f"DB connection failed: {e}")
-            return None
-
-    def _init_db(self):
-        """Initialize database tables"""
-        conn = self._get_db_conn()
-        if not conn:
-            return
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS agents (
-                        id TEXT PRIMARY KEY,
-                        data JSONB NOT NULL
-                    )
-                """
-                )
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS requests (
-                        id TEXT PRIMARY KEY,
-                        data JSONB NOT NULL
-                    )
-                """
-                )
-                conn.commit()
-        except Exception as e:
-            print(f"DB init failed: {e}")
-        finally:
-            conn.close()
+    
+    def _init_supabase(self):
+        """Initialize Supabase - tables must be created manually"""
+        # Tables needed:
+        # CREATE TABLE agents (id TEXT PRIMARY KEY, data JSONB);
+        # CREATE TABLE requests (id TEXT PRIMARY KEY, data JSONB);
+        pass
 
     async def get_agents(self) -> Dict[str, Any]:
-        # Try Postgres first
-        conn = self._get_db_conn()
-        if conn:
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT id, data FROM agents")
-                    rows = cur.fetchall()
-                    return {row[0]: row[1] for row in rows}
-            except Exception as e:
-                print(f"DB error: {e}")
-            finally:
-                conn.close()
-
-        # Fallback to KV
-        if self.kv_url and self.kv_token:
+        if self.supabase_url and self.supabase_key:
             try:
                 import httpx
-
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
-                        f"{self.kv_url}/get/agents",
-                        headers={"Authorization": f"Bearer {self.kv_token}"},
+                        f"{self.supabase_url}/rest/v1/agents",
+                        headers={
+                            "apikey": self.supabase_key,
+                            "Authorization": f"Bearer {self.supabase_key}",
+                        },
                     )
                     if response.status_code == 200:
-                        result = response.json().get("result")
-                        return json.loads(result) if result else {}
+                        rows = response.json()
+                        return {row["id"]: row["data"] for row in rows}
             except Exception as e:
-                print(f"KV error: {e}")
-
+                print(f"Supabase error: {e}")
         return self.memory_agents
 
     async def set_agents(self, agents: Dict[str, Any]):
-        # Try Postgres first
-        conn = self._get_db_conn()
-        if conn:
-            try:
-                with conn.cursor() as cur:
-                    # Clear and re-insert all agents
-                    cur.execute("DELETE FROM agents")
-                    for agent_id, agent_data in agents.items():
-                        cur.execute(
-                            "INSERT INTO agents (id, data) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET data = %s",
-                            (agent_id, json.dumps(agent_data), json.dumps(agent_data)),
-                        )
-                    conn.commit()
-                return
-            except Exception as e:
-                print(f"DB error: {e}")
-            finally:
-                conn.close()
-
-        # Fallback to KV
-        if self.kv_url and self.kv_token:
+        if self.supabase_url and self.supabase_key:
             try:
                 import httpx
-
                 async with httpx.AsyncClient() as client:
-                    await client.post(
-                        f"{self.kv_url}/set/agents",
-                        headers={"Authorization": f"Bearer {self.kv_token}"},
-                        json={"value": json.dumps(agents)},
+                    # Delete all existing agents
+                    await client.delete(
+                        f"{self.supabase_url}/rest/v1/agents",
+                        headers={
+                            "apikey": self.supabase_key,
+                            "Authorization": f"Bearer {self.supabase_key}",
+                        },
+                        params={"id": "neq."}  # Delete all
                     )
+                    # Insert all agents
+                    if agents:
+                        rows = [{"id": agent_id, "data": agent_data} for agent_id, agent_data in agents.items()]
+                        await client.post(
+                            f"{self.supabase_url}/rest/v1/agents",
+                            headers={
+                                "apikey": self.supabase_key,
+                                "Authorization": f"Bearer {self.supabase_key}",
+                                "Content-Type": "application/json",
+                                "Prefer": "return=minimal"
+                            },
+                            json=rows
+                        )
+                return
             except Exception as e:
-                print(f"KV error: {e}")
-
+                print(f"Supabase error: {e}")
         self.memory_agents = agents
 
     async def get_requests(self) -> Dict[str, Any]:
-        # Try Postgres first
-        conn = self._get_db_conn()
-        if conn:
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT id, data FROM requests")
-                    rows = cur.fetchall()
-                    return {row[0]: row[1] for row in rows}
-            except Exception as e:
-                print(f"DB error: {e}")
-            finally:
-                conn.close()
-
-        # Fallback to KV
-        if self.kv_url and self.kv_token:
+        if self.supabase_url and self.supabase_key:
             try:
                 import httpx
-
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
-                        f"{self.kv_url}/get/requests",
-                        headers={"Authorization": f"Bearer {self.kv_token}"},
+                        f"{self.supabase_url}/rest/v1/requests",
+                        headers={
+                            "apikey": self.supabase_key,
+                            "Authorization": f"Bearer {self.supabase_key}",
+                        },
                     )
                     if response.status_code == 200:
-                        result = response.json().get("result")
-                        return json.loads(result) if result else {}
+                        rows = response.json()
+                        return {row["id"]: row["data"] for row in rows}
             except Exception as e:
-                print(f"KV error: {e}")
-
+                print(f"Supabase error: {e}")
         return self.memory_requests
 
     async def set_requests(self, requests: Dict[str, Any]):
-        # Try Postgres first
-        conn = self._get_db_conn()
-        if conn:
-            try:
-                with conn.cursor() as cur:
-                    # Clear and re-insert all requests
-                    cur.execute("DELETE FROM requests")
-                    for request_id, request_data in requests.items():
-                        cur.execute(
-                            "INSERT INTO requests (id, data) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET data = %s",
-                            (request_id, json.dumps(request_data), json.dumps(request_data)),
-                        )
-                    conn.commit()
-                return
-            except Exception as e:
-                print(f"DB error: {e}")
-            finally:
-                conn.close()
-
-        # Fallback to KV
-        if self.kv_url and self.kv_token:
+        if self.supabase_url and self.supabase_key:
             try:
                 import httpx
-
                 async with httpx.AsyncClient() as client:
-                    await client.post(
-                        f"{self.kv_url}/set/requests",
-                        headers={"Authorization": f"Bearer {self.kv_token}"},
-                        json={"value": json.dumps(requests)},
+                    # Delete all existing requests
+                    await client.delete(
+                        f"{self.supabase_url}/rest/v1/requests",
+                        headers={
+                            "apikey": self.supabase_key,
+                            "Authorization": f"Bearer {self.supabase_key}",
+                        },
+                        params={"id": "neq."}  # Delete all
                     )
+                    # Insert all requests
+                    if requests:
+                        rows = [{"id": request_id, "data": request_data} for request_id, request_data in requests.items()]
+                        await client.post(
+                            f"{self.supabase_url}/rest/v1/requests",
+                            headers={
+                                "apikey": self.supabase_key,
+                                "Authorization": f"Bearer {self.supabase_key}",
+                                "Content-Type": "application/json",
+                                "Prefer": "return=minimal"
+                            },
+                            json=rows
+                        )
+                return
             except Exception as e:
-                print(f"KV error: {e}")
-
+                print(f"Supabase error: {e}")
         self.memory_requests = requests
 
 
