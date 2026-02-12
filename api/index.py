@@ -58,11 +58,11 @@ class Storage:
                             "Authorization": f"Bearer {self.supabase_key}",
                         },
                     )
-                    
+
                     if current_response.status_code == 200:
                         current_ids = {row["id"] for row in current_response.json()}
                         new_ids = set(agents.keys())
-                        
+
                         # Delete agents that are no longer in the dict
                         ids_to_delete = current_ids - new_ids
                         for agent_id in ids_to_delete:
@@ -73,7 +73,7 @@ class Storage:
                                     "Authorization": f"Bearer {self.supabase_key}",
                                 },
                             )
-                    
+
                     # Upsert all current agents
                     if agents:
                         rows = [
@@ -131,11 +131,11 @@ class Storage:
                             "Authorization": f"Bearer {self.supabase_key}",
                         },
                     )
-                    
+
                     if current_response.status_code == 200:
                         current_ids = {row["id"] for row in current_response.json()}
                         new_ids = set(requests.keys())
-                        
+
                         # Delete requests that are no longer in the dict
                         ids_to_delete = current_ids - new_ids
                         for request_id in ids_to_delete:
@@ -146,7 +146,7 @@ class Storage:
                                     "Authorization": f"Bearer {self.supabase_key}",
                                 },
                             )
-                    
+
                     # Upsert all current requests
                     if requests:
                         rows = [
@@ -249,7 +249,18 @@ async def delete_agent(agent_id: str):
     requests_db = await storage.get_requests()
 
     if agent_id not in agents_db:
-        raise HTTPException(status_code=404, detail="Agent not found")
+        # Agent might have been already deleted or ID mismatch
+        # Try to fetch fresh data from storage
+        print(f"Agent {agent_id} not found in cache, refreshing...")
+        agents_db = await storage.get_agents()
+        
+        if agent_id not in agents_db:
+            available_ids = list(agents_db.keys())[:3]
+            print(f"Agent {agent_id} still not found. Available IDs: {available_ids}")
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Agent not found. Agent may have been already deleted."
+            )
 
     # Remove all requests assigned to this agent
     for req_id, req in requests_db.items():
