@@ -233,7 +233,12 @@ async def debug_agents():
 @app.get("/agents", response_model=List[Agent])
 async def list_agents():
     agents_db = await storage.get_agents()
-    return list(agents_db.values())
+    # Ensure the ID in the data matches the storage key
+    result = []
+    for storage_id, agent_data in agents_db.items():
+        agent_data["id"] = storage_id  # Use the storage ID
+        result.append(agent_data)
+    return result
 
 
 @app.post("/agents", response_model=Agent)
