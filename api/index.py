@@ -50,7 +50,31 @@ class Storage:
                 import httpx
 
                 async with httpx.AsyncClient() as client:
-                    # Upsert all agents (insert or update)
+                    # Get current agents from Supabase
+                    current_response = await client.get(
+                        f"{self.supabase_url}/rest/v1/agents?select=id",
+                        headers={
+                            "apikey": self.supabase_key,
+                            "Authorization": f"Bearer {self.supabase_key}",
+                        },
+                    )
+                    
+                    if current_response.status_code == 200:
+                        current_ids = {row["id"] for row in current_response.json()}
+                        new_ids = set(agents.keys())
+                        
+                        # Delete agents that are no longer in the dict
+                        ids_to_delete = current_ids - new_ids
+                        for agent_id in ids_to_delete:
+                            await client.delete(
+                                f"{self.supabase_url}/rest/v1/agents?id=eq.{agent_id}",
+                                headers={
+                                    "apikey": self.supabase_key,
+                                    "Authorization": f"Bearer {self.supabase_key}",
+                                },
+                            )
+                    
+                    # Upsert all current agents
                     if agents:
                         rows = [
                             {"id": agent_id, "data": agent_data}
@@ -99,7 +123,31 @@ class Storage:
                 import httpx
 
                 async with httpx.AsyncClient() as client:
-                    # Upsert all requests (insert or update)
+                    # Get current requests from Supabase
+                    current_response = await client.get(
+                        f"{self.supabase_url}/rest/v1/requests?select=id",
+                        headers={
+                            "apikey": self.supabase_key,
+                            "Authorization": f"Bearer {self.supabase_key}",
+                        },
+                    )
+                    
+                    if current_response.status_code == 200:
+                        current_ids = {row["id"] for row in current_response.json()}
+                        new_ids = set(requests.keys())
+                        
+                        # Delete requests that are no longer in the dict
+                        ids_to_delete = current_ids - new_ids
+                        for request_id in ids_to_delete:
+                            await client.delete(
+                                f"{self.supabase_url}/rest/v1/requests?id=eq.{request_id}",
+                                headers={
+                                    "apikey": self.supabase_key,
+                                    "Authorization": f"Bearer {self.supabase_key}",
+                                },
+                            )
+                    
+                    # Upsert all current requests
                     if requests:
                         rows = [
                             {"id": request_id, "data": request_data}
