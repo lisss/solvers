@@ -258,13 +258,12 @@ async def delete_agent(agent_id: str):
         # Try to fetch fresh data from storage
         print(f"Agent {agent_id} not found in cache, refreshing...")
         agents_db = await storage.get_agents()
-        
+
         if agent_id not in agents_db:
             available_ids = list(agents_db.keys())[:3]
             print(f"Agent {agent_id} still not found. Available IDs: {available_ids}")
             raise HTTPException(
-                status_code=404, 
-                detail=f"Agent not found. Agent may have been already deleted."
+                status_code=404, detail=f"Agent not found. Agent may have been already deleted."
             )
 
     # Remove all requests assigned to this agent
@@ -314,6 +313,9 @@ async def create_request(request_data: CreateRequest):
     if best_agent_id:
         request.agent_id = best_agent_id
         request.status = "assigned"
+        # Ensure current_requests exists and is a list
+        if "current_requests" not in agents_db[best_agent_id]:
+            agents_db[best_agent_id]["current_requests"] = []
         agents_db[best_agent_id]["current_requests"].append(request.id)
 
     requests_db[request.id] = request.dict()
