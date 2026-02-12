@@ -220,16 +220,6 @@ async def root():
     return {"message": "Agent Load Balancer API", "version": "1.0"}
 
 
-@app.get("/debug/agents")
-async def debug_agents():
-    agents_db = await storage.get_agents()
-    return {
-        "count": len(agents_db),
-        "ids": list(agents_db.keys()),
-        "sample": list(agents_db.values())[:1] if agents_db else []
-    }
-
-
 @app.get("/agents", response_model=List[Agent])
 async def list_agents():
     agents_db = await storage.get_agents()
