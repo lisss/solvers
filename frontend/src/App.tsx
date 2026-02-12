@@ -104,8 +104,13 @@ const App: React.FC = () => {
     }
 
     try {
-      await requestApi.createRequest(newRequestCustomer, newRequestDescription);
-      setSuccess('Request created and assigned to agent');
+      const response = await requestApi.createRequest(newRequestCustomer, newRequestDescription);
+      const request = response.data;
+      if (request.status === 'assigned') {
+        setSuccess('Request created and assigned to agent');
+      } else {
+        setSuccess('Request created - pending (all agents busy)');
+      }
       setNewRequestCustomer('');
       setNewRequestDescription('');
       await loadData(true); // Force immediate update
@@ -279,12 +284,12 @@ const App: React.FC = () => {
                     <strong>Description:</strong> {request.description}
                   </div>
                   <div>
-                    <strong>Assigned to:</strong> {getAgentName(request.assigned_agent_id)}
+                    <strong>Assigned to:</strong> {getAgentName(request.agent_id)}
                   </div>
                   <div>
                     <strong>Created:</strong> {new Date(request.created_at).toLocaleString()}
                   </div>
-                  {request.status === 'processing' && (
+                  {request.status === 'assigned' && (
                     <button onClick={() => handleCompleteRequest(request.id)} className="success">
                       Complete Request
                     </button>

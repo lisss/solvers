@@ -24,7 +24,7 @@ export interface Request {
   id: string;
   customer_name: string;
   description: string;
-  assigned_agent_id: string | null;
+  agent_id: string | null;
   status: string;
   created_at: string;
   completed_at: string | null;
